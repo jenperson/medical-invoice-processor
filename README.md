@@ -5,7 +5,7 @@ A [Mistral Workflows](https://docs.mistral.ai/workflows/getting-started/introduc
 ## Setup
 
 ```bash
-uv sync
+make installdeps
 ```
 
 ## Commands
@@ -18,13 +18,23 @@ Auto-discovers all workflow classes in `src/workflows/`, registers them with AI 
 make start-worker
 ```
 
-### Execute a workflow
+###  Create agents 
 
-In a separate terminal, trigger a workflow execution by name:
+Creates the agents for the ocr text classification and patient info extraction (if they don't exist already). Only needs to run once.
 
 ```bash
-make execute workflow=hello-world input='{"name": "World"}'
+make create-agents
 ```
+
+### Execute a workflow
+
+In a separate terminal, start the Streamlit app to view the document extraction UI:
+
+```bash
+make streamlit
+```
+
+Upload one of the provided PDFs and click "Start Workflow".
 
 ## Development
 
