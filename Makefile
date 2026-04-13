@@ -20,3 +20,7 @@ create-agents:
 ## Start the Streamlit app
 streamlit:
 	uv run streamlit run src/app.py
+
+## Run load test
+load-test:
+	uv run python src/load_test.py $(if $(n),$(n),)

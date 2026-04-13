@@ -47,6 +47,7 @@ EXTRACTOR_INSTRUCTIONS = """You are an expert in extracting administrative and m
 You analyze the OCR content of a medical document and extract the requested information.
 
 Rules:
+- Recognize field names whether they're in French or English, translating to the expected output keys if necessary (e.g. "nom du patient" or "patient name" should be extracted as "full_name").
 - If information is not present in the document, return null for that field.
 - Never guess information, only extract what is explicitly written.
 - You must respond ONLY in valid JSON according to the requested schema."""
@@ -78,6 +79,8 @@ def main():
     client = Mistral(api_key=api_key)
     project_root = os.path.dirname(os.path.dirname(__file__))
     env_path = os.path.join(project_root, ".env")
+    _save_to_env(env_path, "DEPLOYMENT_NAME", "invoice-processor")
+    _save_to_env(env_path, "BUILD_ID", "2026-04-13.1")
 
     print("Creating classifier agent...")
     classifier = client.beta.agents.create(
