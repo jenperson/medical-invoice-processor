@@ -46,7 +46,7 @@ async def classify_document(ocr_text: str) -> dict:
     client = workflows_mistralai.get_mistral_client()
     response = await client.beta.conversations.start_async(
         agent_id=os.environ["CLASSIFIER_AGENT_ID"],
-        inputs=f"Voici le contenu OCR du document à classifier :\n\n{ocr_text[:8000]}",
+        inputs=f"Here is the OCR content of the document to classify:\n\n{ocr_text[:8000]}",
     )
     return json.loads(response.outputs[-1].content)
 

@@ -121,5 +121,5 @@ Respond ONLY with a valid JSON in this format:
 
 If any information is missing from the document, set the corresponding value to null.
 
-DOCUMENT :
+DOCUMENT:
 {ocr_text[:8000]}"""

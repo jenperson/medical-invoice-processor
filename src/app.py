@@ -152,73 +152,73 @@ def render_step(key: str, step: dict):
     result = step.get("result")
 
     if status == "pending":
-        st.markdown("⏳ En attente…")
+        st.markdown("⏳ Pending…")
     elif status == "running":
-        st.spinner("⚙️ En cours…")
+        st.spinner("⚙️ In Progress…")
         # spinner widget needs a context manager — use a visual substitute
-        st.markdown("⚙️ En cours…")
+        st.markdown("⚙️ In Progress…")
     elif status == "waiting_human":
         result = step.get("result", {})
         confidence = result.get("confidence", 0.0) if result else 0.0
         st.warning(
-            f"⚠️ Confiance insuffisante ({confidence * 100:.0f}%). "
-            "Choisissez la catégorie manuellement."
+            f"⚠️ Insufficient confidence ({confidence * 100:.0f}%). "
+            "Please choose the category manually."
         )
         selected = st.selectbox(
-            "Catégorie",
+            "Category",
             options=list(CATEGORY_LABELS.keys()),
             format_func=lambda k: CATEGORY_LABELS[k],
             key="manual_category_select",
         )
-        if st.button("Valider", key="manual_category_submit"):
+        if st.button("Validate", key="manual_category_submit"):
             run_async(send_signal(st.session_state.execution_id, selected))
             st.session_state.signal_sent = True
             st.rerun()
     elif status == "done" and result is not None:
         if key == "ocr":
-            with st.expander("Texte OCR brut", expanded=False):
+            with st.expander("Raw OCR Text", expanded=False):
                 st.markdown(result)
         elif key == "classify":
-            category  = result.get("category", "autre")
+            category  = result.get("category", "other")
             confidence = result.get("confidence", 0.0)
             explanation = result.get("explanation", "")
             label = CATEGORY_LABELS.get(category, f"❓ {category}")
             col1, col2 = st.columns([3, 1])
             col1.markdown(f"**{label}**")
             col1.caption(explanation)
-            col2.metric("Confiance", f"{confidence * 100:.0f}%")
+            col2.metric("Confidence", f"{confidence * 100:.0f}%")
             col2.progress(confidence)
         elif key == "extract":
             common = result.get("common", {})
             specific = result.get("specific", {})
 
-            st.markdown("**🧍 Informations patient**")
+            st.markdown("**🧍 Patient Information**")
             common_rows = [
-                {"Champ": COMMON_FIELD_LABELS.get(k, k), "Valeur": v}
+                {"Field": COMMON_FIELD_LABELS.get(k, k), "Value": v}
                 for k, v in common.items() if v is not None
             ]
             if common_rows:
                 st.table(common_rows)
             else:
-                st.info("Aucune information commune trouvée.")
+                st.info("No common information found.")
 
             if specific:
-                st.markdown("**📋 Informations spécifiques**")
+                st.markdown("**📋 Specific Information**")
                 specific_rows = [
-                    {"Champ": k.replace("_", " ").capitalize(), "Valeur": v}
+                    {"Field": k.replace("_", " ").capitalize(), "Value": v}
                     for k, v in specific.items() if v is not None
                 ]
                 if specific_rows:
                     st.table(specific_rows)
                 else:
-                    st.info("Aucune information spécifique trouvée.")
+                    st.info("No specific information found.")
 
 
 # ── UI ────────────────────────────────────────────────────────────────────────
 
 st.set_page_config(page_title="PDF OCR & Classification", page_icon="📄", layout="wide")
 st.title("📄 PDF OCR & Classification")
-st.caption("Upload a PDF → OCR → Classification → Extraction patient")
+st.caption("Upload a PDF → OCR → Classification → Patient Extraction")
 
 with st.sidebar:
     st.header("⚙️ Parameters")
@@ -313,7 +313,7 @@ if st.session_state.execution_id and not st.session_state.done:
 
     if all_done:
         st.session_state.done = True
-        st.success("✅ Terminé !")
+        st.success("✅ Completed!")
     elif waiting_human and not st.session_state.signal_sent:
         pass
     elif waiting_human and st.session_state.signal_sent:
@@ -323,7 +323,7 @@ if st.session_state.execution_id and not st.session_state.done:
         try:
             wf_status = run_async(get_execution_status(execution_id))
             if wf_status in ("FAILED", "CANCELED", "TERMINATED"):
-                st.error(f"Workflow terminé avec statut : {wf_status}")
+                st.error(f"Workflow ended with status: {wf_status}")
                 st.session_state.done = True
             else:
                 time.sleep(0.5)
@@ -339,4 +339,4 @@ elif st.session_state.execution_id and st.session_state.done:
         st.markdown(f"### {title}")
         step = steps.get(key, {"status": "pending", "result": None})
         render_step(key, step)
-    st.success("✅ Terminé !")
+    st.success("✅ Completed!")
