@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 from datetime import timedelta
 
@@ -7,13 +8,14 @@ import mistralai.workflows as workflows
 import mistralai.workflows.plugins.mistralai as workflows_mistralai
 from dotenv import load_dotenv
 from pydantic import BaseModel
-from temporalio import activity as temporal_activity
 
 from extraction_fields import build_extraction_prompt
-from logging_config import silence_noisy_loggers
+
+
+for name in ("mistralai_workflows", "httpx", "httpcore"):
+    logging.getLogger(name).setLevel(logging.WARNING)
 
 load_dotenv(override=True)
-silence_noisy_loggers()
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -93,7 +95,7 @@ class PdfOcrWorkflow:
             await workflows.workflow.wait_condition(lambda: self._manual_category is not None)
             classification["category"] = self._manual_category
             classification["confidence"] = 1.0
-            classification["explanation"] = f"Catégorie choisie manuellement : {self._manual_category}"
+            classification["explanation"] = f"Manually selected category: {self._manual_category}"
 
         self.steps["classify"] = {"status": "done", "result": classification}
 
@@ -102,8 +104,7 @@ class PdfOcrWorkflow:
         self.steps["extract"] = {"status": "done", "result": patient_info}
 
         return {"filename": filename, "ocr_text": ocr_text, "classification": classification, "patient_info": patient_info}
-
-
+        
 async def main() -> None:
     print("Worker ready — waiting for tasks...\n")
     await workflows.run_worker([PdfOcrWorkflow])

@@ -1,6 +1,6 @@
 """
-Champs à extraire par type de document.
-Importé par workflow.py et app.py.
+Fields to extract by document type.
+Imported by workflow.py and app.py.
 """
 
 COMMON_FIELDS: list[tuple[str, str]] = [

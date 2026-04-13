@@ -30,29 +30,29 @@ BASE_URL = "https://api.mistral.ai"
 WORKFLOWS_CLIENT = None
 
 CATEGORY_LABELS = {
-    "ordonnance": "📋 Ordonnance",
-    "facture_soin": "🧾 Facture de soin",
-    "compte_rendu_hospitalisation": "🏥 Compte-rendu d'hospitalisation",
-    "analyse_biologique": "🔬 Analyse biologique",
-    "imagerie_medicale": "🩻 Imagerie médicale",
-    "certificat_medical": "📄 Certificat médical",
-    "mutuelle_remboursement": "💳 Remboursement mutuelle",
-    "securite_sociale_remboursement": "🏛️ Remboursement Sécu",
-    "compte_rendu_consultation": "👨‍⚕️ Compte-rendu de consultation",
-    "consentement_eclaire": "✍️ Consentement éclairé",
-    "autre": "❓ Autre",
+    "prescription": "📋 Prescription",
+    "medical_bill": "🧾 Medical Bill",
+    "hospitalization_report": "🏥 Hospitalization Report",
+    "biological_analysis": "🔬 Biological Analysis",
+    "medical_imaging": "🩻 Medical Imaging",
+    "medical_certificate": "📄 Medical Certificate",
+    "mutual_reimbursement": "💳 Mutual Reimbursement",
+    "social_security_reimbursement": "🏛️ Social Security Reimbursement",
+    "consultation_report": "👨‍⚕️ Consultation Report",
+    "informed_consent": "✍️ Informed Consent",
+    "other": "❓ Other",
 }
 
 COMMON_FIELD_LABELS = {
-    "nom_complet": "Nom complet",
-    "adresse_patient": "Adresse",
-    "numero_secu": "N° Sécurité sociale",
+    "full_name": "Full Name",
+    "patient_address": "Address",
+    "social_security_number": "Social Security Number",
 }
 
 STEPS_CONFIG = [
-    ("ocr",      "🔍 OCR du document"),
+    ("ocr",      "🔍 OCR of the document"),
     ("classify", "🏷️ Classification"),
-    ("extract",  "👤 Extraction patient"),
+    ("extract",  "👤 Patient Extraction"),
 ]
 
 
