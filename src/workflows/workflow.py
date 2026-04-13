@@ -3,16 +3,14 @@ import json
 import os
 from datetime import timedelta
 
-import mistralai
 import mistralai.workflows as workflows
 import mistralai.workflows.plugins.mistralai as workflows_mistralai
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from temporalio import activity as temporal_activity
-from temporalio import workflow as temporal_workflow
 
 from extraction_fields import build_extraction_prompt
-from logging_config import silence_noisy_loggers, wf_start, wf_activity, wf_waiting, wf_signal, wf_done
+from logging_config import silence_noisy_loggers
 
 load_dotenv(override=True)
 silence_noisy_loggers()
@@ -28,19 +26,21 @@ class ManualCategorySignal(BaseModel):
 
 @workflows.activity(name="ocr_pdf", start_to_close_timeout=timedelta(minutes=5), retry_policy_max_attempts=2)
 async def ocr_pdf(file_id: str, filename: str) -> str:
-    wf_activity("ocr_pdf", filename, temporal_activity.info().workflow_id[-8:])
     client = workflows_mistralai.get_mistral_client()
     signed_url = await client.files.get_signed_url_async(file_id=file_id)
     ocr_response = await client.ocr.process_async(
         model="mistral-ocr-latest",
-        document=mistralai.DocumentURLChunk(document_url=signed_url.url, document_name=filename),
+        document={
+            "type": "document_url",
+            "document_url": signed_url.url,
+            "document_name": filename,
+        },
     )
     return "\n\n".join(page.markdown for page in ocr_response.pages)
 
 
 @workflows.activity(name="classify_document", start_to_close_timeout=timedelta(minutes=2), retry_policy_max_attempts=2)
 async def classify_document(ocr_text: str) -> dict:
-    wf_activity("classify_document", wf_id=temporal_activity.info().workflow_id[-8:])
     client = workflows_mistralai.get_mistral_client()
     response = await client.beta.conversations.start_async(
         agent_id=os.environ["CLASSIFIER_AGENT_ID"],
@@ -51,7 +51,6 @@ async def classify_document(ocr_text: str) -> dict:
 
 @workflows.activity(name="extract_patient_info", start_to_close_timeout=timedelta(minutes=2), retry_policy_max_attempts=2)
 async def extract_patient_info(ocr_text: str, category: str) -> dict:
-    wf_activity("extract_patient_info", f"category={category}", temporal_activity.info().workflow_id[-8:])
     client = workflows_mistralai.get_mistral_client()
     response = await client.beta.conversations.start_async(
         agent_id=os.environ["EXTRACTOR_AGENT_ID"],
@@ -82,9 +81,6 @@ class PdfOcrWorkflow:
 
     @workflows.workflow.entrypoint
     async def run(self, file_id: str, filename: str, confidence_threshold: float = 0.9, is_batch_mode: bool = False) -> dict:
-        wf_id = temporal_workflow.info().workflow_id[-8:]
-        wf_start(wf_id, filename, is_batch_mode=is_batch_mode)
-
         self.steps["ocr"]["status"] = "running"
         ocr_text = await ocr_pdf(file_id, filename)
         self.steps["ocr"] = {"status": "done", "result": ocr_text}
@@ -93,21 +89,17 @@ class PdfOcrWorkflow:
         classification = await classify_document(ocr_text)
 
         if classification.get("confidence", 0.0) < confidence_threshold:
-            wf_waiting(wf_id, classification["confidence"], confidence_threshold)
             self.steps["classify"] = {"status": "waiting_human", "result": classification}
             await workflows.workflow.wait_condition(lambda: self._manual_category is not None)
             classification["category"] = self._manual_category
             classification["confidence"] = 1.0
             classification["explanation"] = f"Catégorie choisie manuellement : {self._manual_category}"
-            wf_signal(wf_id, self._manual_category)
 
         self.steps["classify"] = {"status": "done", "result": classification}
 
         self.steps["extract"]["status"] = "running"
         patient_info = await extract_patient_info(ocr_text, classification["category"])
         self.steps["extract"] = {"status": "done", "result": patient_info}
-
-        wf_done(wf_id, classification["category"], classification["confidence"])
 
         return {"filename": filename, "ocr_text": ocr_text, "classification": classification, "patient_info": patient_info}
 

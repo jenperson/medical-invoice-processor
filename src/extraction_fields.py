@@ -4,85 +4,85 @@ Importé par workflow.py et app.py.
 """
 
 COMMON_FIELDS: list[tuple[str, str]] = [
-    ("nom_complet", "Nom complet du patient (nom + prénom)"),
-    ("adresse_patient", "Adresse complète du patient"),
-    ("numero_secu", "Numéro de sécurité sociale du patient"),
+    ("full_name", "Full name of the patient (last name + first name)"),
+    ("patient_address", "Full address of the patient"),
+    ("social_security_number", "Social security number of the patient"),
 ]
 
 SPECIFIC_FIELDS: dict[str, list[tuple[str, str]]] = {
-    "ordonnance": [
-        ("medecin_nom", "Nom du médecin prescripteur"),
-        ("medecin_adresse", "Adresse du médecin prescripteur"),
-        ("medecin_rpps", "Numéro RPPS du médecin"),
-        ("medicaments", "Liste des médicaments prescrits (séparés par des virgules)"),
-        ("date_prescription", "Date de la prescription"),
+    "prescription": [
+        ("doctor_name", "Name of the doctor who made the prescription"),
+        ("doctor_address", "Address of the doctor who made the prescription"),
+        ("doctor_rpps", "RPPS number of the doctor"),
+        ("medications", "List of prescribed medications (separated by commas)"),
+        ("prescription_date", "Date of the prescription"),
     ],
-    "facture_soin": [
-        ("professionnel_nom", "Nom du professionnel de santé"),
-        ("professionnel_adresse", "Adresse du professionnel de santé"),
-        ("montant_facture", "Montant total facturé (avec devise)"),
-        ("actes", "Actes ou prestations facturés"),
-        ("date_soin", "Date du soin"),
+    "medical_bill": [
+        ("healthcare_professional_name", "Name of the healthcare professional"),
+        ("healthcare_professional_address", "Address of the healthcare professional"),
+        ("bill_amount", "Total billed amount (with currency)"),
+        ("services", "Billed services or procedures"),
+        ("care_date", "Date of care"),
     ],
-    "compte_rendu_hospitalisation": [
-        ("etablissement", "Nom de l'établissement hospitalier"),
-        ("service", "Service ou unité de soin"),
-        ("medecin_responsable", "Médecin responsable"),
-        ("date_entree", "Date d'entrée"),
-        ("date_sortie", "Date de sortie"),
-        ("diagnostic_principal", "Diagnostic principal"),
+    "hospitalization_report": [
+        ("hospital_name", "Name of the hospital"),
+        ("department", "Department or care unit"),
+        ("responsible_doctor", "Responsible doctor"),
+        ("admission_date", "Date of admission"),
+        ("discharge_date", "Date of discharge"),
+        ("primary_diagnosis", "Primary diagnosis"),
     ],
-    "analyse_biologique": [
-        ("laboratoire", "Nom du laboratoire"),
-        ("medecin_prescripteur", "Médecin prescripteur"),
-        ("date_prelevement", "Date du prélèvement"),
-        ("analyses", "Analyses effectuées"),
-        ("resultats_anormaux", "Résultats anormaux signalés"),
+    "biological_analysis": [
+        ("laboratory", "Name of the laboratory"),
+        ("prescribing_doctor", "Prescribing doctor"),
+        ("sample_date", "Date of the sample"),
+        ("analyses", "Performed analyses"),
+        ("abnormal_results", "Reported abnormal results"),
     ],
-    "imagerie_medicale": [
-        ("etablissement", "Établissement ou cabinet de radiologie"),
-        ("medecin_radiologue", "Nom du radiologue"),
-        ("type_examen", "Type d'examen (IRM, scanner, radio…)"),
-        ("region_anatomique", "Région anatomique examinée"),
-        ("date_examen", "Date de l'examen"),
-        ("conclusion", "Conclusion ou résultat principal"),
+    "medical_imaging": [
+        ("facility", "Name of the imaging facility"),
+        ("radiologist_name", "Name of the radiologist"),
+        ("exam_type", "Type of exam (MRI, CT, X-ray, etc.)"),
+        ("anatomical_region", "Anatomical region examined"),
+        ("exam_date", "Date of the exam"),
+        ("conclusion", "Conclusion or main finding"),
     ],
-    "certificat_medical": [
-        ("medecin_nom", "Nom du médecin signataire"),
-        ("medecin_adresse", "Adresse du médecin"),
-        ("objet_certificat", "Objet du certificat"),
-        ("date_certificat", "Date du certificat"),
-        ("duree_arret", "Durée d'arrêt de travail si mentionnée"),
+    "medical_certificate": [
+        ("doctor_name", "Name of the signing doctor"),
+        ("doctor_address", "Address of the doctor"),
+        ("certificate_subject", "Subject of the certificate"),
+        ("certificate_date", "Date of the certificate"),
+        ("sick_leave_duration", "Duration of sick leave if mentioned"),
     ],
-    "mutuelle_remboursement": [
-        ("mutuelle_nom", "Nom de la mutuelle"),
-        ("numero_adherent", "Numéro d'adhérent"),
-        ("montant_rembourse", "Montant remboursé par la mutuelle"),
-        ("date_remboursement", "Date du remboursement"),
-        ("actes_rembourses", "Actes remboursés"),
+    "mutual_reimbursement": [
+        ("mutual_name", "Name of the mutual insurance"),
+        ("member_number", "Member number"),
+        ("reimbursement_amount", "Amount reimbursed by the mutual insurance"),
+        ("reimbursement_date", "Reimbursement date"),
+        ("reimbursed_acts", "Reimbursed acts"),
     ],
-    "securite_sociale_remboursement": [
-        ("caisse_nom", "Nom de la caisse d'assurance maladie"),
-        ("montant_rembourse", "Montant remboursé par la Sécu"),
-        ("taux_remboursement", "Taux de remboursement appliqué"),
-        ("date_remboursement", "Date du remboursement"),
-        ("actes_rembourses", "Actes remboursés"),
+    "social_security_reimbursement": [
+        ("fund_name", "Name of the social security fund"),
+        ("reimbursement_amount", "Amount reimbursed by social security"),
+        ("reimbursement_rate", "Applied reimbursement rate"),
+        ("reimbursement_date", "Reimbursement date"),
+        ("reimbursed_acts", "Reimbursed acts"),
     ],
-    "compte_rendu_consultation": [
-        ("medecin_nom", "Nom du médecin consultant"),
-        ("medecin_specialite", "Spécialité du médecin"),
-        ("date_consultation", "Date de la consultation"),
-        ("motif", "Motif de la consultation"),
-        ("diagnostic", "Diagnostic posé"),
-        ("traitement_prescrit", "Traitement ou suivi prescrit"),
+    "consultation_report": [
+        ("doctor_name", "Name of the consulting doctor"),
+        ("doctor_specialty", "Specialty of the doctor"),
+        ("consultation_date", "Date of the consultation"),
+        ("reason", "Reason for the consultation"),
+        ("diagnosis", "Diagnosis"),
+        ("prescribed_treatment", "Prescribed treatment or follow-up"),
     ],
-    "consentement_eclaire": [
-        ("medecin_nom", "Nom du médecin"),
-        ("etablissement", "Établissement"),
-        ("acte_concerne", "Acte médical concerné"),
-        ("date_signature", "Date de signature"),
+    "informed_consent": [
+        ("doctor_name", "Name of the doctor"),
+        ("facility", "Facility"),
+        ("medical_procedure", "Medical procedure concerned"),
+        ("signature_date", "Date of signature"),
     ],
-    "autre": [],
+    "other": [],
 }
 
 
@@ -92,34 +92,34 @@ def build_extraction_prompt(ocr_text: str, category: str) -> str:
     common_lines = "\n".join(f'  - "{key}": {desc}' for key, desc in COMMON_FIELDS)
     specific_lines = (
         "\n".join(f'  - "{key}": {desc}' for key, desc in specific)
-        if specific else '  (aucun champ spécifique pour ce type de document)'
+        if specific else '  (no specific fields for this type of document)'
     )
     specific_json_example = (
         "{" + ", ".join(f'"{k}": "..."' for k, _ in specific) + "}"
         if specific else "{}"
     )
 
-    return f"""Type de document : {category}
+    return f"""Document type: {category}
 
-Extrais les informations suivantes du document OCR ci-dessous.
+Extract the following information from the OCR document below.
 
-CHAMPS COMMUNS (toujours présents dans "common") :
+COMMON FIELDS (always present in "common"):
 {common_lines}
 
-CHAMPS SPÉCIFIQUES pour "{category}" (dans "specific") :
+SPECIFIC FIELDS for "{category}" (in "specific"):
 {specific_lines}
 
-Réponds UNIQUEMENT avec un JSON valide de cette forme :
+Respond ONLY with a valid JSON in this format:
 {{
   "common": {{
-    "nom_complet": "...",
-    "adresse_patient": "...",
-    "numero_secu": "..."
+    "full_name": "...",
+    "patient_address": "...",
+    "social_security_number": "..."
   }},
   "specific": {specific_json_example}
 }}
 
-Si une information est absente du document, mets null pour la valeur correspondante.
+If any information is missing from the document, set the corresponding value to null.
 
 DOCUMENT :
 {ocr_text[:8000]}"""

@@ -22,12 +22,12 @@ except ImportError:
 
 load_dotenv(override=True)
 
-import mistralai
 from mistralai.client import Mistral
-from mistralai.workflows import workflow
+from mistralai.workflows.client import get_mistral_client
 
 API_KEY = os.environ["MISTRAL_API_KEY"]
 BASE_URL = "https://api.mistral.ai"
+WORKFLOWS_CLIENT = None
 
 CATEGORY_LABELS = {
     "ordonnance": "📋 Ordonnance",
@@ -63,6 +63,16 @@ class PdfOcrInput(BaseModel):
     is_batch_mode: bool = False  # True for load tests, False for Streamlit
 
 
+def get_workflows_client():
+    global WORKFLOWS_CLIENT
+    if WORKFLOWS_CLIENT is None:
+        WORKFLOWS_CLIENT = get_mistral_client(
+            server_url=BASE_URL,
+            api_key=API_KEY,
+        )
+    return WORKFLOWS_CLIENT
+
+
 def run_async(coro):
     loop = asyncio.new_event_loop()
     try:
@@ -82,27 +92,27 @@ async def upload_pdf(pdf_bytes: bytes, filename: str) -> str:
 
 async def trigger_workflow(file_id: str, filename: str, confidence_threshold: float) -> str:
     execution_id = f"pdf-ocr-{uuid.uuid4().hex[:12]}"
-    async with workflow(base_url=BASE_URL, api_key=API_KEY, timeout=30.0) as client:
-        resp = await client.execute_workflow(
-            workflow_identifier="pdf_ocr_workflow",
-            input_data=PdfOcrInput(file_id=file_id, filename=filename, confidence_threshold=confidence_threshold),
-            execution_id=execution_id,
-        )
+    client = get_workflows_client()
+    resp = await client.workflows.execute_workflow_async(
+        workflow_identifier="pdf_ocr_workflow",
+        input=PdfOcrInput(file_id=file_id, filename=filename, confidence_threshold=confidence_threshold).model_dump(mode="json"),
+        execution_id=execution_id,
+    )
     return resp.execution_id
 
 
 async def poll_steps(execution_id: str) -> dict:
-    async with workflow(base_url=BASE_URL, api_key=API_KEY, timeout=30.0) as client:
-        resp = await client.query_workflow(
-            execution_id=execution_id,
-            query_name="get_steps",
-        )
+    client = get_workflows_client()
+    resp = await client.workflows.executions.query_workflow_execution_async(
+        execution_id=execution_id,
+        name="get_steps",
+    )
     return resp.result or {}
 
 
 async def get_execution_status(execution_id: str) -> str:
-    async with workflow(base_url=BASE_URL, api_key=API_KEY, timeout=30.0) as client:
-        resp = await client.get_workflow_execution(execution_id=execution_id)
+    client = get_workflows_client()
+    resp = await client.workflows.executions.get_workflow_execution_async(execution_id=execution_id)
     return resp.status
 
 
@@ -111,12 +121,12 @@ class ManualCategorySignal(BaseModel):
 
 
 async def send_signal(execution_id: str, category: str):
-    async with workflow(base_url=BASE_URL, api_key=API_KEY, timeout=30.0) as client:
-        await client.signal_workflow(
-            execution_id=execution_id,
-            signal_name="manual_category",
-            input_data=ManualCategorySignal(category=category),
-        )
+    client = get_workflows_client()
+    await client.workflows.executions.signal_workflow_execution_async(
+        execution_id=execution_id,
+        name="manual_category",
+        input=ManualCategorySignal(category=category).model_dump(mode="json"),
+    )
 
 
 # ── PDF rendering ─────────────────────────────────────────────────────────────
@@ -211,20 +221,20 @@ st.title("📄 PDF OCR & Classification")
 st.caption("Upload a PDF → OCR → Classification → Extraction patient")
 
 with st.sidebar:
-    st.header("⚙️ Paramètres")
+    st.header("⚙️ Parameters")
     confidence_threshold = st.slider(
-        "Seuil de confiance",
+        "Confidence Threshold",
         min_value=0.0,
         max_value=1.0,
         value=0.9,
         step=0.05,
-        help="En dessous de ce seuil, la classification est soumise à validation manuelle.",
+        help="Below this threshold, classification requires manual validation.",
     )
-    st.caption(f"Seuil actuel : **{confidence_threshold * 100:.0f}%**")
+    st.caption(f"Current threshold: **{confidence_threshold * 100:.0f}%**")
     if confidence_threshold >= 1.0:
-        st.info("☝️ Validation manuelle systématique")
+        st.info("☝️ Manual validation always required")
     elif confidence_threshold == 0.0:
-        st.info("✅ Validation manuelle jamais déclenchée")
+        st.info("✅ Manual validation never required")
 
 # Init session state
 if "execution_id" not in st.session_state:
@@ -237,12 +247,12 @@ if "signal_sent" not in st.session_state:
     st.session_state.signal_sent = False
 
 
-uploaded = st.file_uploader("Choisir un fichier PDF", type=["pdf"])
+uploaded = st.file_uploader("Choose a PDF file", type=["pdf"])
 
 if uploaded is not None:
     st.info(f"**{uploaded.name}** — {uploaded.size / 1024:.1f} KB")
 
-    if st.button("Lancer le workflow", type="primary"):
+    if st.button("Start Workflow", type="primary"):
         # Reset state
         st.session_state.execution_id = None
         st.session_state.done = False
@@ -252,7 +262,7 @@ if uploaded is not None:
         pdf_bytes = uploaded.read()
         filename = uploaded.name
 
-        with st.status("Upload du PDF…", expanded=False) as s:
+        with st.status("Uploading PDF…", expanded=False) as s:
             file_id = run_async(upload_pdf(pdf_bytes, filename))
             s.update(label="Upload ✓", state="complete")
 

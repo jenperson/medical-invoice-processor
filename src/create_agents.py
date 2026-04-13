@@ -9,53 +9,53 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-from mistralai import Mistral, CompletionArgs, ResponseFormat, JSONSchema
+from mistralai.client import Mistral, models
 from pydantic import BaseModel, Field
 from typing import Optional
 
 
 DOCUMENT_CATEGORIES = [
-    "ordonnance",
-    "facture_soin",
-    "compte_rendu_hospitalisation",
-    "analyse_biologique",
-    "imagerie_medicale",
-    "certificat_medical",
-    "mutuelle_remboursement",
-    "securite_sociale_remboursement",
-    "compte_rendu_consultation",
-    "consentement_eclaire",
-    "autre",
+    "prescription",
+    "medical_bill",
+    "hospitalization_report",
+    "biological_analysis",
+    "medical_imaging",
+    "medical_certificate",
+    "mutual_reimbursement",
+    "social_security_reimbursement",
+    "consultation_report",
+    "informed_consent",
+    "other",
 ]
 
-CLASSIFIER_INSTRUCTIONS = f"""Tu es un expert en classification de documents médicaux.
-Tu analyses le contenu OCR d'un document et tu le classes dans l'une des catégories suivantes :
+CLASSIFIER_INSTRUCTIONS = f"""You are an expert in medical document classification.
+You analyze the OCR content of a document and classify it into one of the following categories:
 
 {chr(10).join(f"- {c}" for c in DOCUMENT_CATEGORIES)}
 
-Tu réponds UNIQUEMENT en JSON valide selon le schéma demandé.
-Sois précis dans ton explication et justifie ta classification."""
+You must respond ONLY in valid JSON according to the requested schema.
+Be precise in your explanation and justify your classification."""
 
 
 class DocumentClassification(BaseModel):
-    category: str = Field(description=f"Une des catégories : {', '.join(DOCUMENT_CATEGORIES)}")
-    confidence: float = Field(ge=0.0, le=1.0, description="Niveau de confiance entre 0 et 1")
-    explanation: str = Field(description="Explication courte de la classification")
+    category: str = Field(description=f"One of the categories: {', '.join(DOCUMENT_CATEGORIES)}")
+    confidence: float = Field(ge=0.0, le=1.0, description="Confidence level between 0 and 1")
+    explanation: str = Field(description="Short explanation of the classification")
 
 
-EXTRACTOR_INSTRUCTIONS = """Tu es un expert en extraction d'informations administratives et médicales.
-Tu analyses le contenu OCR d'un document médical et tu extrais les informations demandées.
+EXTRACTOR_INSTRUCTIONS = """You are an expert in extracting administrative and medical information.
+You analyze the OCR content of a medical document and extract the requested information.
 
-Règles :
-- Si une information n'est pas présente dans le document, retourne null pour ce champ.
-- Ne devine jamais une information, extrait uniquement ce qui est explicitement écrit.
-- Tu réponds UNIQUEMENT en JSON valide selon le schéma demandé."""
+Rules:
+- If information is not present in the document, return null for that field.
+- Never guess information, only extract what is explicitly written.
+- You must respond ONLY in valid JSON according to the requested schema."""
 
 
 class PatientInfo(BaseModel):
-    nom_complet: Optional[str] = Field(None, description="Nom complet du patient (nom + prénom)")
-    adresse_patient: Optional[str] = Field(None, description="Adresse complète du patient")
-    numero_secu: Optional[str] = Field(None, description="Numéro de sécurité sociale")
+    full_name: Optional[str] = Field(None, description="The complete name of the patient (first and last name)")
+    patient_address: Optional[str] = Field(None, description="The complete address of the patient")
+    social_security_number: Optional[str] = Field(None, description="The social security number of the patient")
 
 
 def _save_to_env(env_path: str, key: str, value: str):
@@ -76,19 +76,20 @@ def main():
         raise SystemExit("❌ Set MISTRAL_API_KEY in your .env file first.")
 
     client = Mistral(api_key=api_key)
-    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    project_root = os.path.dirname(os.path.dirname(__file__))
+    env_path = os.path.join(project_root, ".env")
 
     print("Creating classifier agent...")
     classifier = client.beta.agents.create(
         model="mistral-medium-latest",
         name="medical-document-classifier",
-        description="Classifie les documents médicaux en catégories prédéfinies avec un niveau de confiance.",
+        description="Classify medical documents into predefined categories with a confidence level.",
         instructions=CLASSIFIER_INSTRUCTIONS,
-        completion_args=CompletionArgs(
+        completion_args=models.CompletionArgs(
             temperature=0.1,
-            response_format=ResponseFormat(
+            response_format=models.ResponseFormat(
                 type="json_schema",
-                json_schema=JSONSchema(
+                json_schema=models.JSONSchema(
                     name="document_classification",
                     schema=DocumentClassification.model_json_schema(),
                 ),
@@ -102,13 +103,13 @@ def main():
     extractor = client.beta.agents.create(
         model="mistral-medium-latest",
         name="medical-patient-extractor",
-        description="Extrait les informations d'identification du patient depuis un document médical.",
+        description="Extract patient identification information from a medical document.",
         instructions=EXTRACTOR_INSTRUCTIONS,
-        completion_args=CompletionArgs(
+        completion_args=models.CompletionArgs(
             temperature=0.0,
-            response_format=ResponseFormat(
+            response_format=models.ResponseFormat(
                 type="json_schema",
-                json_schema=JSONSchema(
+                json_schema=models.JSONSchema(
                     name="patient_info",
                     schema=PatientInfo.model_json_schema(),
                 ),

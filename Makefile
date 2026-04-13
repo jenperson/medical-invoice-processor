@@ -13,6 +13,10 @@ start-worker:
 execute:
 	uv run python src/workflows/start.py $(if $(workflow),--workflow $(workflow),) $(if $(input),--input '$(input)',)
 
+## Create agents (if they don't exist already). Only needs to run once.
+create-agents:
+	uv run python src/create_agents.py
+
 ## Start the Streamlit app
 streamlit:
 	uv run streamlit run src/app.py
