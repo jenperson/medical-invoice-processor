@@ -1,10 +1,8 @@
 """
 Run once to create the classifier and extractor agents, then store their IDs in .env.
-
-    cp .env.example .env        # add your MISTRAL_API_KEY
-    uv run python src/entrypoints/create_agents.py
 """
 import os
+from datetime import date
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
@@ -66,8 +64,9 @@ def main():
     client = Mistral(api_key=api_key)
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     env_path = os.path.join(project_root, ".env")
+    build_id = f"{date.today().isoformat()}.1"
     _save_to_env(env_path, "DEPLOYMENT_NAME", "invoice-processor")
-    _save_to_env(env_path, "BUILD_ID", "2026-04-13.1")
+    _save_to_env(env_path, "BUILD_ID", build_id)
 
     print("Creating classifier agent...")
     classifier = client.beta.agents.create(

@@ -11,14 +11,11 @@ from pydantic import BaseModel
 
 from shared.extraction_fields import build_extraction_prompt
 
+load_dotenv(override=True)
 
 for name in ("mistralai_workflows", "httpx", "httpcore"):
     logging.getLogger(name).setLevel(logging.WARNING)
 
-load_dotenv(override=True)
-
-
-# ── Models ────────────────────────────────────────────────────────────────────
 
 class ManualCategorySignal(BaseModel):
     category: str
