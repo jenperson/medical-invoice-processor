@@ -5,7 +5,6 @@ Each workflow will be distributed across available workers.
 import asyncio
 import os
 import sys
-import time
 import uuid
 from pathlib import Path
 from dotenv import load_dotenv
@@ -17,7 +16,7 @@ from mistralai.client import Mistral
 from mistralai.workflows.client import get_mistral_client
 
 API_KEY = os.environ["MISTRAL_API_KEY"]
-BASE_URL = "https://api.mistral.ai"
+BASE_URL = os.environ.get("SERVER_URL", "https://api.mistral.ai")
 WORKFLOWS_CLIENT = None
 
 # Number of workflows to launch (from CLI arg, default to 10)

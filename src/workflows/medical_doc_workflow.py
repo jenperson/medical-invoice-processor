@@ -23,7 +23,7 @@ class ManualCategorySignal(BaseModel):
 
 # ── Activities ────────────────────────────────────────────────────────────────
 
-@workflows.activity(name="ocr_pdf", start_to_close_timeout=timedelta(minutes=5), retry_policy_max_attempts=2)
+@workflows.activity(start_to_close_timeout=timedelta(minutes=5), retry_policy_max_attempts=2)
 async def ocr_pdf(file_id: str, filename: str) -> str:
     client = workflows_mistralai.get_mistral_client()
     signed_url = await client.files.get_signed_url_async(file_id=file_id)
@@ -38,7 +38,7 @@ async def ocr_pdf(file_id: str, filename: str) -> str:
     return "\n\n".join(page.markdown for page in ocr_response.pages)
 
 
-@workflows.activity(name="classify_document", start_to_close_timeout=timedelta(minutes=2), retry_policy_max_attempts=2)
+@workflows.activity(start_to_close_timeout=timedelta(minutes=2), retry_policy_max_attempts=2)
 async def classify_document(ocr_text: str) -> dict:
     client = workflows_mistralai.get_mistral_client()
     response = await client.beta.conversations.start_async(
@@ -48,7 +48,7 @@ async def classify_document(ocr_text: str) -> dict:
     return json.loads(response.outputs[-1].content)
 
 
-@workflows.activity(name="extract_patient_info", start_to_close_timeout=timedelta(minutes=2), retry_policy_max_attempts=2)
+@workflows.activity(start_to_close_timeout=timedelta(minutes=2), retry_policy_max_attempts=2)
 async def extract_patient_info(ocr_text: str, category: str) -> dict:
     client = workflows_mistralai.get_mistral_client()
     response = await client.beta.conversations.start_async(

@@ -1,8 +1,5 @@
 """
 Streamlit UI for PDF OCR + Classification + Extraction Workflow.
-
-Terminal 1 — worker:   uv run python src/workflows/workflow.py
-Terminal 2 — UI:       uv run streamlit run src/entrypoints/app.py
 """
 import asyncio
 import base64
@@ -27,7 +24,7 @@ from mistralai.workflows.client import get_mistral_client
 from shared.extraction_fields import CATEGORY_LABELS
 
 API_KEY = os.environ["MISTRAL_API_KEY"]
-BASE_URL = "https://api.mistral.ai"
+BASE_URL = os.environ.get("SERVER_URL", "https://api.mistral.ai")
 WORKFLOWS_CLIENT = None
 
 COMMON_FIELD_LABELS = {
@@ -42,13 +39,13 @@ STEPS_CONFIG = [
     ("extract",  "👤 Patient Extraction"),
 ]
 
-
 class PdfOcrInput(BaseModel):
     file_id: str
     filename: str
     confidence_threshold: float = 0.9
     is_batch_mode: bool = False  # True for load tests, False for Streamlit
 
+# ── Workflow Activities ─────────────────────────────────────────────────────
 
 def get_workflows_client():
     global WORKFLOWS_CLIENT
@@ -181,7 +178,7 @@ def render_step(key: str, step: dict):
 
             st.markdown("**🧍 Patient Information**")
             common_rows = [
-                {"Field": COMMON_FIELD_LABELS.get(k, k), "Value": v}
+                {"Field": COMMON_FIELD_LABELS.get(k, k), "Value": ", ".join(v) if isinstance(v, list) else v}
                 for k, v in common.items() if v is not None
             ]
             if common_rows:
@@ -192,7 +189,7 @@ def render_step(key: str, step: dict):
             if specific:
                 st.markdown("**📋 Specific Information**")
                 specific_rows = [
-                    {"Field": k.replace("_", " ").capitalize(), "Value": v}
+                    {"Field": k.replace("_", " ").capitalize(), "Value": ", ".join(v) if isinstance(v, list) else v}
                     for k, v in specific.items() if v is not None
                 ]
                 if specific_rows:
