@@ -86,7 +86,26 @@ SPECIFIC_FIELDS: dict[str, list[tuple[str, str]]] = {
 }
 
 
+DOCUMENT_CATEGORIES: list[str] = list(SPECIFIC_FIELDS.keys())
+
+CATEGORY_LABELS: dict[str, str] = {
+    "prescription": "📋 Prescription",
+    "medical_bill": "🧾 Medical Bill",
+    "hospitalization_report": "🏥 Hospitalization Report",
+    "biological_analysis": "🔬 Biological Analysis",
+    "medical_imaging": "🩻 Medical Imaging",
+    "medical_certificate": "📄 Medical Certificate",
+    "mutual_reimbursement": "💳 Mutual Reimbursement",
+    "social_security_reimbursement": "🏛️ Social Security Reimbursement",
+    "consultation_report": "👨‍⚕️ Consultation Report",
+    "informed_consent": "✍️ Informed Consent",
+    "other": "❓ Other",
+}
+
+
 def build_extraction_prompt(ocr_text: str, category: str) -> str:
+    """Return the extractor-agent prompt for OCR text and a document category.
+    """
     specific = SPECIFIC_FIELDS.get(category, [])
 
     common_lines = "\n".join(f'  - "{key}": {desc}' for key, desc in COMMON_FIELDS)

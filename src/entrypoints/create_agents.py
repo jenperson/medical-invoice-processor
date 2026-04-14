@@ -2,7 +2,7 @@
 Run once to create the classifier and extractor agents, then store their IDs in .env.
 
     cp .env.example .env        # add your MISTRAL_API_KEY
-    uv run python create_agents.py
+    uv run python src/entrypoints/create_agents.py
 """
 import os
 from dotenv import load_dotenv
@@ -13,20 +13,7 @@ from mistralai.client import Mistral, models
 from pydantic import BaseModel, Field
 from typing import Optional
 
-
-DOCUMENT_CATEGORIES = [
-    "prescription",
-    "medical_bill",
-    "hospitalization_report",
-    "biological_analysis",
-    "medical_imaging",
-    "medical_certificate",
-    "mutual_reimbursement",
-    "social_security_reimbursement",
-    "consultation_report",
-    "informed_consent",
-    "other",
-]
+from shared.extraction_fields import DOCUMENT_CATEGORIES
 
 CLASSIFIER_INSTRUCTIONS = f"""You are an expert in medical document classification.
 You analyze the OCR content of a document and classify it into one of the following categories:
@@ -77,7 +64,7 @@ def main():
         raise SystemExit("❌ Set MISTRAL_API_KEY in your .env file first.")
 
     client = Mistral(api_key=api_key)
-    project_root = os.path.dirname(os.path.dirname(__file__))
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     env_path = os.path.join(project_root, ".env")
     _save_to_env(env_path, "DEPLOYMENT_NAME", "invoice-processor")
     _save_to_env(env_path, "BUILD_ID", "2026-04-13.1")

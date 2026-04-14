@@ -15,12 +15,12 @@ execute:
 
 ## Create agents (if they don't exist already). Only needs to run once.
 create-agents:
-	uv run python src/create_agents.py
+	PYTHONPATH=src uv run python src/entrypoints/create_agents.py
 
 ## Start the Streamlit app
 streamlit:
-	uv run streamlit run src/app.py
+	PYTHONPATH=src uv run streamlit run src/entrypoints/app.py
 
 ## Run load test
 load-test:
-	uv run python src/load_test.py $(if $(n),$(n),)
+	uv run python src/entrypoints/load_test.py $(if $(n),$(n),)

@@ -26,7 +26,7 @@ This command also adds the agent IDs, a deployment ID, and a build ID to your `.
 
 ### Register workflows in AI Studio
 
-Use the following command to auto-discoves all workflow classes in `src/workflows/`, register them with AI Studio, and starts polling for executions. The task queue is set to your hostname:
+Use the following command to auto-discoves all workflow classes in `src/workflows/`, register them with AI Studio, and starts polling for executions. The task deployent name is set to your hostname:
 
 ```bash
 make start-worker

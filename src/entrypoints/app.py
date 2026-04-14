@@ -1,8 +1,8 @@
 """
 Streamlit UI for PDF OCR + Classification + Extraction Workflow.
 
-Terminal 1 — worker:   uv run python workflow.py
-Terminal 2 — UI:       uv run streamlit run app.py
+Terminal 1 — worker:   uv run python src/workflows/workflow.py
+Terminal 2 — UI:       uv run streamlit run src/entrypoints/app.py
 """
 import asyncio
 import base64
@@ -24,24 +24,11 @@ load_dotenv(override=True)
 
 from mistralai.client import Mistral
 from mistralai.workflows.client import get_mistral_client
+from shared.extraction_fields import CATEGORY_LABELS
 
 API_KEY = os.environ["MISTRAL_API_KEY"]
 BASE_URL = "https://api.mistral.ai"
 WORKFLOWS_CLIENT = None
-
-CATEGORY_LABELS = {
-    "prescription": "📋 Prescription",
-    "medical_bill": "🧾 Medical Bill",
-    "hospitalization_report": "🏥 Hospitalization Report",
-    "biological_analysis": "🔬 Biological Analysis",
-    "medical_imaging": "🩻 Medical Imaging",
-    "medical_certificate": "📄 Medical Certificate",
-    "mutual_reimbursement": "💳 Mutual Reimbursement",
-    "social_security_reimbursement": "🏛️ Social Security Reimbursement",
-    "consultation_report": "👨‍⚕️ Consultation Report",
-    "informed_consent": "✍️ Informed Consent",
-    "other": "❓ Other",
-}
 
 COMMON_FIELD_LABELS = {
     "full_name": "Full Name",

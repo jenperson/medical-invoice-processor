@@ -9,7 +9,7 @@ import mistralai.workflows.plugins.mistralai as workflows_mistralai
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from extraction_fields import build_extraction_prompt
+from shared.extraction_fields import build_extraction_prompt
 
 
 for name in ("mistralai_workflows", "httpx", "httpcore"):

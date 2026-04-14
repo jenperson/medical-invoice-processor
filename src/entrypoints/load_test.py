@@ -77,7 +77,7 @@ async def launch_workflow(pdf_path: Path, index: int) -> tuple[int, str]:
 
 
 async def main():
-    project_root = Path(__file__).resolve().parent.parent
+    project_root = Path(__file__).resolve().parent.parent.parent
     input_dir = project_root / "input_doc"
     pdf_files = list(input_dir.glob("*.pdf"))
 
