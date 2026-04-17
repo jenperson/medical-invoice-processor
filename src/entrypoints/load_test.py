@@ -27,7 +27,6 @@ class PdfOcrInput(BaseModel):
     file_id: str
     filename: str
     confidence_threshold: float = 0.9
-    is_batch_mode: bool = False  # True for load tests, False for Streamlit
 
 
 def get_workflows_sdk_client():
@@ -60,7 +59,6 @@ async def trigger_workflow(file_id: str, filename: str) -> str:
             file_id=file_id,
             filename=filename,
             confidence_threshold=0.9,
-            is_batch_mode=True,
         ).model_dump(mode="json"),
         execution_id=execution_id,
     )

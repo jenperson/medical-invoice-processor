@@ -10,7 +10,7 @@ import mistralai.workflows.plugins.mistralai as workflows_mistralai
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
-from shared.extraction_fields import COMMON_FIELDS, DOCUMENT_CATEGORIES, SPECIFIC_FIELDS, build_extraction_prompt
+from shared.extraction_fields import COMMON_FIELDS, DOCUMENT_CATEGORIES, SPECIFIC_FIELDS
 
 load_dotenv(override=True)
 
@@ -26,71 +26,6 @@ class DocumentClassification(BaseModel):
     category: str = Field(description=f"One of: {', '.join(DOCUMENT_CATEGORIES)}")
     confidence: float = Field(ge=0.0, le=1.0)
     explanation: str
-
-
-def extract_text_from_delta_content(delta_content: object) -> str:
-    if isinstance(delta_content, str):
-        return delta_content
-    if not isinstance(delta_content, list):
-        return ""
-
-    parts: list[str] = []
-    for chunk in delta_content:
-        if isinstance(chunk, dict):
-            if chunk.get("type") == "text" and isinstance(chunk.get("text"), str):
-                parts.append(chunk["text"])
-            continue
-
-        chunk_type = getattr(chunk, "type", None)
-        chunk_text = getattr(chunk, "text", None)
-        if chunk_type == "text" and isinstance(chunk_text, str):
-            parts.append(chunk_text)
-
-    return "".join(parts)
-
-
-def build_classification_messages(ocr_text: str) -> list[dict[str, str]]:
-    return [
-        {
-            "role": "system",
-            "content": (
-                "You are an expert in medical document classification. "
-                "Return only valid JSON that matches the schema."
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                "Classify this OCR document into one category from:\n"
-                + "\n".join(f"- {c}" for c in DOCUMENT_CATEGORIES)
-                + "\n\nOCR DOCUMENT:\n"
-                + ocr_text[:8000]
-            ),
-        },
-    ]
-
-
-def build_classification_explanation_messages(ocr_text: str) -> list[dict[str, str]]:
-    return [
-        {
-            "role": "system",
-            "content": (
-                "You are an expert in medical document classification. "
-                "Provide a concise plain-language explanation of why this document fits a category."
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                "Briefly explain your classification rationale in 2-3 sentences. "
-                "Do not output JSON.\n\n"
-                "Candidate categories:\n"
-                + "\n".join(f"- {c}" for c in DOCUMENT_CATEGORIES)
-                + "\n\nOCR DOCUMENT:\n"
-                + ocr_text[:8000]
-            ),
-        },
-    ]
 
 
 @lru_cache(maxsize=None)
@@ -115,74 +50,64 @@ def get_extraction_output_model(category: str) -> type[BaseModel]:
 
 # ── Activities ────────────────────────────────────────────────────────────────
 
+# Resolve the uploaded file ID into a temporary signed URL for Document QnA.
 @workflows.activity(start_to_close_timeout=timedelta(minutes=5), retry_policy_max_attempts=2)
-async def ocr_pdf(file_id: str, filename: str) -> str:
+async def get_document_signed_url(file_id: str) -> str:
     client = workflows_mistralai.get_mistral_client()
     signed_url = await client.files.get_signed_url_async(file_id=file_id)
-    ocr_response = await client.ocr.process_async(
-        model="mistral-ocr-latest",
-        document={
-            "type": "document_url",
-            "document_url": signed_url.url,
-            "document_name": filename,
-        },
-    )
-    return "\n\n".join(page.markdown for page in ocr_response.pages)
+    return signed_url.url
 
-
+# Classify the document category directly from the document URL using structured output.
 @workflows.activity(start_to_close_timeout=timedelta(minutes=2), retry_policy_max_attempts=2)
-async def classify_document(ocr_text: str) -> dict:
+async def classify_document(document_url: str, filename: str) -> dict:
     client = workflows_mistralai.get_mistral_client()
     model = os.environ.get("MISTRAL_CLASSIFIER_MODEL", "mistral-medium-latest")
-
-    streamed_explanation = ""
-    published_explanation_len = 0
-    async with workflows.task_from(
-        state={"explanation": ""},
-        type="classification_explanation",
-    ) as explanation_task:
-        stream = await client.chat.stream_async(
-            model=model,
-            temperature=0.1,
-            messages=build_classification_explanation_messages(ocr_text),
-        )
-        async with stream:
-            async for chunk in stream:
-                if not chunk.data.choices:
-                    continue
-                delta = chunk.data.choices[0].delta
-                delta_text = extract_text_from_delta_content(delta.content)
-                if delta_text:
-                    streamed_explanation += delta_text
-                    # Keep updates frequent enough to feel live in the UI.
-                    if len(streamed_explanation) - published_explanation_len >= 8:
-                        await explanation_task.update_state({"explanation": streamed_explanation})
-                        published_explanation_len = len(streamed_explanation)
-
-        if streamed_explanation and len(streamed_explanation) != published_explanation_len:
-            await explanation_task.update_state({"explanation": streamed_explanation})
-
     response = await client.chat.parse_async(
         response_format=DocumentClassification,
         model=model,
-        temperature=0.1,
-        messages=build_classification_messages(ocr_text),
+        temperature=0.0,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are an expert in medical document classification. "
+                    "Return only valid JSON that matches the schema."
+                ),
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"Classify the medical document '{filename}' into exactly one category from:\n"
+                            + "\n".join(f"- {c}" for c in DOCUMENT_CATEGORIES)
+                            + "\n\n"
+                            "Return confidence between 0 and 1 and a short explanation."
+                        ),
+                    },
+                    {
+                        "type": "document_url",
+                        "document_url": document_url,
+                        "document_name": filename,
+                    },
+                ],
+            },
+        ],
     )
     parsed = response.choices[0].message.parsed if response.choices and response.choices[0].message else None
     if parsed is None:
         raise RuntimeError("Classification response could not be parsed.")
+    return parsed.model_dump(mode="json")
 
-    classification = parsed.model_dump(mode="json")
-    if streamed_explanation.strip():
-        classification["explanation"] = streamed_explanation.strip()
-    return classification
-
-
+# Extract common and category-specific fields from the document with schema-constrained JSON.
 @workflows.activity(start_to_close_timeout=timedelta(minutes=2), retry_policy_max_attempts=2)
-async def extract_patient_info(ocr_text: str, category: str) -> dict:
+async def extract_patient_info(document_url: str, filename: str, category: str) -> dict:
     client = workflows_mistralai.get_mistral_client()
     model = os.environ.get("MISTRAL_EXTRACTOR_MODEL", "mistral-medium-latest")
     extraction_model = get_extraction_output_model(category)
+    common_fields_text = "\n".join(f"- {key}" for key, _ in COMMON_FIELDS)
+    specific_fields_text = "\n".join(f"- {key}" for key, _ in SPECIFIC_FIELDS.get(category, []))
     response = await client.chat.parse_async(
         response_format=extraction_model,
         model=model,
@@ -191,14 +116,31 @@ async def extract_patient_info(ocr_text: str, category: str) -> dict:
             {
                 "role": "system",
                 "content": (
-                    "You extract administrative and medical information from OCR text. "
+                    "You extract administrative and medical information from a medical document. "
                     "Return only valid JSON that matches the schema. "
                     "If a field is missing, set it to null."
                 ),
             },
             {
                 "role": "user",
-                "content": build_extraction_prompt(ocr_text, category),
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"Extract fields from '{filename}' for category '{category}'.\n\n"
+                            "Populate these common fields:\n"
+                            f"{common_fields_text}\n\n"
+                            "Populate these category-specific fields:\n"
+                            f"{specific_fields_text if specific_fields_text else '- (none)'}\n\n"
+                            "Return null for missing values."
+                        ),
+                    },
+                    {
+                        "type": "document_url",
+                        "document_url": document_url,
+                        "document_name": filename,
+                    },
+                ],
             },
         ],
     )
@@ -228,7 +170,7 @@ class PdfOcrWorkflow(workflows.InteractiveWorkflow):
     @workflows.workflow.query(name="get_todo_list")
     def get_todo_list(self) -> dict:
         defs = [
-            ("ocr", "Extract OCR text", "Read the uploaded PDF and extract text content."),
+            ("ocr", "Prepare document for Document QnA", "Generate a signed URL so Mistral Document AI can read the document."),
             ("classify", "Classify document type", "Predict the medical document category with confidence."),
             ("extract", "Extract structured fields", "Extract patient and document-specific fields."),
         ]
@@ -253,10 +195,10 @@ class PdfOcrWorkflow(workflows.InteractiveWorkflow):
         self._manual_category = payload.category
 
     @workflows.workflow.entrypoint
-    async def run(self, file_id: str, filename: str, confidence_threshold: float = 0.9, is_batch_mode: bool = False) -> workflows_mistralai.ChatAssistantWorkflowOutput:
+    async def run(self, file_id: str, filename: str, confidence_threshold: float = 0.9) -> workflows_mistralai.ChatAssistantWorkflowOutput:
         ocr_item = workflows_mistralai.TodoListItem(
-            title="Extract OCR text",
-            description="Read the uploaded PDF and extract text content.",
+            title="Prepare document for Document QnA",
+            description="Generate a signed URL so Mistral Document AI can read the document.",
         )
         classify_item = workflows_mistralai.TodoListItem(
             title="Classify document type",
@@ -275,12 +217,15 @@ class PdfOcrWorkflow(workflows.InteractiveWorkflow):
         async with workflows_mistralai.TodoList(items=[ocr_item, classify_item, extract_item]):
             self.steps["ocr"]["status"] = "running"
             async with ocr_item:
-                ocr_text = await ocr_pdf(file_id, filename)
-            self.steps["ocr"] = {"status": "done", "result": ocr_text}
+                signed_document_url = await get_document_signed_url(file_id)
+            self.steps["ocr"] = {
+                "status": "done",
+                "result": "Document prepared for Document QnA (OCR handled by Mistral Document AI).",
+            }
 
             self.steps["classify"]["status"] = "running"
             async with classify_item:
-                classification = await classify_document(ocr_text)
+                classification = await classify_document(signed_document_url, filename)
 
                 if classification.get("confidence", 0.0) < confidence_threshold:
                     self.steps["classify"] = {"status": "waiting_human", "result": classification}
@@ -293,14 +238,14 @@ class PdfOcrWorkflow(workflows.InteractiveWorkflow):
 
             self.steps["extract"]["status"] = "running"
             async with extract_item:
-                patient_info = await extract_patient_info(ocr_text, classification["category"])
+                patient_info = await extract_patient_info(signed_document_url, filename, classification["category"])
             self.steps["extract"] = {"status": "done", "result": patient_info}
 
         return workflows_mistralai.ChatAssistantWorkflowOutput(
             content=[workflows_mistralai.TextOutput(text=f"Processing complete for {filename}.")],
             structuredContent={
                 "filename": filename,
-                "ocr_text": ocr_text,
+                "ocr_text": "Document processed with Document QnA (no standalone OCR text payload).",
                 "classification": classification,
                 "patient_info": patient_info,
             },

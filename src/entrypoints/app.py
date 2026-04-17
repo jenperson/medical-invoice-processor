@@ -32,7 +32,7 @@ COMMON_FIELD_LABELS = {
 }
 
 STEPS_CONFIG = [
-    ("ocr",      "🔍 OCR of the document"),
+    ("ocr",      "✅ Document Preparation"),
     ("classify", "🏷️ Classification"),
     ("extract",  "👤 Patient Extraction"),
 ]
@@ -41,7 +41,6 @@ class PdfOcrInput(BaseModel):
     file_id: str
     filename: str
     confidence_threshold: float = 0.9
-    is_batch_mode: bool = False  # True for load tests, False for Streamlit
 
 # ── Workflow Activities ─────────────────────────────────────────────────────
 
@@ -190,8 +189,9 @@ def render_step(key: str, step: dict):
             st.rerun()
     elif status == "done" and result is not None:
         if key == "ocr":
-            with st.expander("Raw OCR Text", expanded=False):
-                st.markdown(result)
+            st.markdown("✅ Prepared for Document QnA")
+            if isinstance(result, str) and result.strip():
+                st.caption(result)
         elif key == "classify":
             category  = result.get("category", "other")
             confidence = result.get("confidence", 0.0)
