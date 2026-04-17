@@ -155,47 +155,34 @@ async def extract_patient_info(document_url: str, filename: str, category: str) 
 @workflows.workflow.define(name="pdf_ocr_workflow")
 class PdfOcrWorkflow(workflows.InteractiveWorkflow):
     def __init__(self):
+        # UI-facing step state exposed through the `get_steps` query.
         self.steps = {
             "ocr": {"status": "pending", "result": None},
             "classify": {"status": "pending", "result": None},
             "extract": {"status": "pending", "result": None},
         }
-        self._todo_runtime: dict[str, workflows_mistralai.TodoListItem] = {}
+        # Set by the `manual_category` signal when a user overrides classification.
         self._manual_category = None
 
     @workflows.workflow.query(name="get_steps")
     def get_steps(self) -> dict:
+        # Queries are synchronous/read-only: frontend polls this for progress.
         return self.steps
-
-    @workflows.workflow.query(name="get_todo_list")
-    def get_todo_list(self) -> dict:
-        defs = [
-            ("ocr", "Prepare document for Document QnA", "Generate a signed URL so Mistral Document AI can read the document."),
-            ("classify", "Classify document type", "Predict the medical document category with confidence."),
-            ("extract", "Extract structured fields", "Extract patient and document-specific fields."),
-        ]
-        items = []
-        for item_id, title, description in defs:
-            item = self._todo_runtime.get(item_id)
-            status = getattr(item, "status", "todo") if item else "todo"
-            if hasattr(status, "value"):
-                status = status.value
-            items.append(
-                {
-                    "id": item_id,
-                    "title": title,
-                    "description": description,
-                    "status": status,
-                }
-            )
-        return {"items": items}
 
     @workflows.workflow.signal(name="manual_category")
     async def manual_category_signal(self, payload: ManualCategorySignal) -> None:
+        # Signals are async/write: this mutates workflow state while run() is active.
         self._manual_category = payload.category
 
     @workflows.workflow.entrypoint
-    async def run(self, file_id: str, filename: str, confidence_threshold: float = 0.9) -> workflows_mistralai.ChatAssistantWorkflowOutput:
+    async def run(
+        self,
+        file_id: str,
+        filename: str,
+        confidence_threshold: float = 0.9,
+        manual_review_timeout_seconds: Optional[float] = None,
+    ) -> workflows_mistralai.ChatAssistantWorkflowOutput:
+        # TodoList items let clients display coarse workflow progress in addition to step data.
         ocr_item = workflows_mistralai.TodoListItem(
             title="Prepare document for Document QnA",
             description="Generate a signed URL so Mistral Document AI can read the document.",
@@ -208,11 +195,6 @@ class PdfOcrWorkflow(workflows.InteractiveWorkflow):
             title="Extract structured fields",
             description="Extract patient and document-specific fields.",
         )
-        self._todo_runtime = {
-            "ocr": ocr_item,
-            "classify": classify_item,
-            "extract": extract_item,
-        }
 
         async with workflows_mistralai.TodoList(items=[ocr_item, classify_item, extract_item]):
             self.steps["ocr"]["status"] = "running"
@@ -228,11 +210,26 @@ class PdfOcrWorkflow(workflows.InteractiveWorkflow):
                 classification = await classify_document(signed_document_url, filename)
 
                 if classification.get("confidence", 0.0) < confidence_threshold:
+                    # Low confidence enters a human-in-the-loop branch.
                     self.steps["classify"] = {"status": "waiting_human", "result": classification}
-                    await workflows.workflow.wait_condition(lambda: self._manual_category is not None)
-                    classification["category"] = self._manual_category
-                    classification["confidence"] = 1.0
-                    classification["explanation"] = f"Manually selected category: {self._manual_category}"
+                    try:
+                        # wait_condition pauses deterministically until signal or timeout.
+                        await workflows.workflow.wait_condition(
+                            lambda: self._manual_category is not None,
+                            timeout=manual_review_timeout_seconds,
+                            timeout_summary="manual_category_review",
+                        )
+                    except asyncio.TimeoutError:
+                        # Non-interactive callers can set a timeout to avoid waiting forever.
+                        classification["explanation"] = (
+                            f"{classification.get('explanation', '').strip()} "
+                            "Manual review timed out; using model-predicted category."
+                        ).strip()
+                    else:
+                        # Manual override takes precedence when a signal arrives in time.
+                        classification["category"] = self._manual_category
+                        classification["confidence"] = 1.0
+                        classification["explanation"] = f"Manually selected category: {self._manual_category}"
 
             self.steps["classify"] = {"status": "done", "result": classification}
 
@@ -242,6 +239,7 @@ class PdfOcrWorkflow(workflows.InteractiveWorkflow):
             self.steps["extract"] = {"status": "done", "result": patient_info}
 
         return workflows_mistralai.ChatAssistantWorkflowOutput(
+            # Return both human-readable text and structured payload for the UI.
             content=[workflows_mistralai.TextOutput(text=f"Processing complete for {filename}.")],
             structuredContent={
                 "filename": filename,

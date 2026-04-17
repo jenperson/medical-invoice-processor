@@ -27,6 +27,7 @@ class PdfOcrInput(BaseModel):
     file_id: str
     filename: str
     confidence_threshold: float = 0.9
+    manual_review_timeout_seconds: float | None = 5.0
 
 
 def get_workflows_sdk_client():
@@ -59,6 +60,7 @@ async def trigger_workflow(file_id: str, filename: str) -> str:
             file_id=file_id,
             filename=filename,
             confidence_threshold=0.9,
+            manual_review_timeout_seconds=5.0,
         ).model_dump(mode="json"),
         execution_id=execution_id,
     )
