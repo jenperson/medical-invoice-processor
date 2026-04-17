@@ -2,7 +2,6 @@
 Streamlit UI for PDF OCR + Classification + Extraction Workflow.
 """
 import asyncio
-import base64
 import io
 import os
 import time
@@ -25,7 +24,6 @@ from shared.extraction_fields import CATEGORY_LABELS
 
 API_KEY = os.environ["MISTRAL_API_KEY"]
 BASE_URL = os.environ.get("SERVER_URL", "https://api.mistral.ai")
-WORKFLOWS_CLIENT = None
 
 COMMON_FIELD_LABELS = {
     "full_name": "Full Name",
@@ -48,13 +46,13 @@ class PdfOcrInput(BaseModel):
 # ── Workflow Activities ─────────────────────────────────────────────────────
 
 def get_workflows_client():
-    global WORKFLOWS_CLIENT
-    if WORKFLOWS_CLIENT is None:
-        WORKFLOWS_CLIENT = get_mistral_client(
-            server_url=BASE_URL,
-            api_key=API_KEY,
-        )
-    return WORKFLOWS_CLIENT
+    # Do not cache across run_async() calls: each call creates/closes its own
+    # event loop, and reusing an async client across loops triggers
+    # "Event loop is closed" errors.
+    return get_mistral_client(
+        server_url=BASE_URL,
+        api_key=API_KEY,
+    )
 
 
 def run_async(coro):
@@ -62,6 +60,9 @@ def run_async(coro):
     try:
         return loop.run_until_complete(coro)
     finally:
+        # Drain pending async generators before closing the loop to avoid:
+        # "Task was destroyed but it is pending! ... async_generator_athrow"
+        loop.run_until_complete(loop.shutdown_asyncgens())
         loop.close()
 
 
@@ -76,28 +77,33 @@ async def upload_pdf(pdf_bytes: bytes, filename: str) -> str:
 
 async def trigger_workflow(file_id: str, filename: str, confidence_threshold: float) -> str:
     execution_id = f"pdf-ocr-{uuid.uuid4().hex[:12]}"
-    client = get_workflows_client()
-    resp = await client.workflows.execute_workflow_async(
-        workflow_identifier="pdf_ocr_workflow",
-        input=PdfOcrInput(file_id=file_id, filename=filename, confidence_threshold=confidence_threshold).model_dump(mode="json"),
-        execution_id=execution_id,
-    )
+    async with get_workflows_client() as client:
+        resp = await client.workflows.execute_workflow_async(
+            workflow_identifier="pdf_ocr_workflow",
+            input=PdfOcrInput(file_id=file_id, filename=filename, confidence_threshold=confidence_threshold).model_dump(mode="json"),
+            execution_id=execution_id,
+        )
     return resp.execution_id
 
 
 async def poll_steps(execution_id: str) -> dict:
-    client = get_workflows_client()
-    resp = await client.workflows.executions.query_workflow_execution_async(
-        execution_id=execution_id,
-        name="get_steps",
-    )
+    async with get_workflows_client() as client:
+        resp = await client.workflows.executions.query_workflow_execution_async(
+            execution_id=execution_id,
+            name="get_steps",
+        )
     return resp.result or {}
 
 
 async def get_execution_status(execution_id: str) -> str:
-    client = get_workflows_client()
-    resp = await client.workflows.executions.get_workflow_execution_async(execution_id=execution_id)
+    async with get_workflows_client() as client:
+        resp = await client.workflows.executions.get_workflow_execution_async(execution_id=execution_id)
     return resp.status
+
+
+async def get_execution_details(execution_id: str):
+    async with get_workflows_client() as client:
+        return await client.workflows.executions.get_workflow_execution_async(execution_id=execution_id)
 
 
 class ManualCategorySignal(BaseModel):
@@ -105,12 +111,36 @@ class ManualCategorySignal(BaseModel):
 
 
 async def send_signal(execution_id: str, category: str):
-    client = get_workflows_client()
-    await client.workflows.executions.signal_workflow_execution_async(
-        execution_id=execution_id,
-        name="manual_category",
-        input=ManualCategorySignal(category=category).model_dump(mode="json"),
-    )
+    async with get_workflows_client() as client:
+        await client.workflows.executions.signal_workflow_execution_async(
+            execution_id=execution_id,
+            name="manual_category",
+            input=ManualCategorySignal(category=category).model_dump(mode="json"),
+        )
+
+
+def backfill_steps_from_execution_result(steps: dict, result: object) -> dict:
+    if not isinstance(result, dict):
+        return steps
+
+    structured = result.get("structuredContent")
+    if not isinstance(structured, dict):
+        structured = result.get("structured_content")
+    if not isinstance(structured, dict):
+        structured = result
+
+    ocr_text = structured.get("ocr_text")
+    classification = structured.get("classification")
+    patient_info = structured.get("patient_info")
+
+    updated = dict(steps)
+    if ocr_text is not None:
+        updated["ocr"] = {"status": "done", "result": ocr_text}
+    if isinstance(classification, dict):
+        updated["classify"] = {"status": "done", "result": classification}
+    if isinstance(patient_info, dict):
+        updated["extract"] = {"status": "done", "result": patient_info}
+    return updated
 
 
 # ── PDF rendering ─────────────────────────────────────────────────────────────
@@ -227,6 +257,8 @@ if "done" not in st.session_state:
     st.session_state.done = False
 if "steps" not in st.session_state:
     st.session_state.steps = {}
+if "poll_error" not in st.session_state:
+    st.session_state.poll_error = None
 if "signal_sent" not in st.session_state:
     st.session_state.signal_sent = False
 
@@ -237,10 +269,10 @@ if uploaded is not None:
     st.info(f"**{uploaded.name}** — {uploaded.size / 1024:.1f} KB")
 
     if st.button("Start Workflow", type="primary"):
-        # Reset state
         st.session_state.execution_id = None
         st.session_state.done = False
         st.session_state.steps = {}
+        st.session_state.poll_error = None
         st.session_state.signal_sent = False
 
         pdf_bytes = uploaded.read()
@@ -254,16 +286,16 @@ if uploaded is not None:
         st.session_state.execution_id = execution_id
         st.rerun()
 
-# If a workflow is running, show steps
 if st.session_state.execution_id and not st.session_state.done:
     execution_id = st.session_state.execution_id
 
-    # Poll
     try:
         steps = run_async(poll_steps(execution_id))
         st.session_state.steps = steps
-    except Exception:
+        st.session_state.poll_error = None
+    except Exception as exc:
         steps = st.session_state.steps
+        st.session_state.poll_error = str(exc)
 
     col_pdf, col_steps = st.columns([1, 1.2])
 
@@ -279,6 +311,8 @@ if st.session_state.execution_id and not st.session_state.done:
                 st.info("PyMuPDF not available for preview")
 
     with col_steps:
+        if st.session_state.poll_error:
+            st.warning(f"Progress polling failed: {st.session_state.poll_error}")
         for key, title in STEPS_CONFIG:
             st.markdown(f"### {title}")
             step = steps.get(key, {"status": "pending", "result": None})
@@ -305,18 +339,26 @@ if st.session_state.execution_id and not st.session_state.done:
         st.rerun()
     else:
         try:
-            wf_status = run_async(get_execution_status(execution_id))
-            if wf_status in ("FAILED", "CANCELED", "TERMINATED"):
+            execution = run_async(get_execution_details(execution_id))
+            wf_status = execution.status
+            if wf_status == "COMPLETED":
+                st.session_state.steps = backfill_steps_from_execution_result(
+                    st.session_state.steps,
+                    execution.result,
+                )
+                st.session_state.done = True
+                st.success("✅ Completed!")
+            elif wf_status in ("FAILED", "CANCELED", "TERMINATED"):
                 st.error(f"Workflow ended with status: {wf_status}")
                 st.session_state.done = True
             else:
                 time.sleep(0.5)
                 st.rerun()
-        except Exception:
+        except Exception as exc:
+            st.session_state.poll_error = str(exc)
             time.sleep(0.5)
             st.rerun()
 
-# If workflow completed, render final state
 elif st.session_state.execution_id and st.session_state.done:
     steps = st.session_state.steps
     for key, title in STEPS_CONFIG:

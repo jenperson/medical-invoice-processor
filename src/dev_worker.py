@@ -1,21 +1,4 @@
-"""Development worker supervisor with automatic restart on source changes.
-
-This script runs a child worker process (``discover.py``) and watches the ``src/``
-tree for Python file changes. It is intended for local development so workflow
-code edits are picked up without manually stopping and restarting the worker.
-
-How it works:
-- Starts a child process using the current Python interpreter.
-- Recursively watches ``src/`` for ``*.py`` file events.
-- Debounces rapid file system events to avoid restart storms.
-- Restarts the child worker when a relevant change is detected.
-- If the child worker crashes/exits, waits for the next file change and then
-    starts it again.
-- Handles ``Ctrl+C`` cleanly by terminating the child and stopping the watcher.
-
-Key tuning knob:
-- ``DEBOUNCE_SECONDS`` controls minimum time between restart triggers.
-"""
+"""Watch src/ for .py changes and auto-restart the workflow worker."""
 
 import os
 import signal
@@ -36,8 +19,16 @@ class _RestartHandler(FileSystemEventHandler):
         self._needs_restart = False
 
     def on_any_event(self, event) -> None:  # type: ignore[override]
-        if not event.src_path.endswith(".py"):
+        if event.is_directory:
             return
+        if any(part == "__pycache__" for part in event.src_path.split(os.sep)):
+            return
+        if getattr(event, "event_type", None) not in {"modified", "created", "deleted", "moved"}:
+            return
+        if not event.src_path.endswith(".py"):
+            dest_path = getattr(event, "dest_path", "")
+            if not dest_path.endswith(".py"):
+                return
         now = time.monotonic()
         if now - self._last_trigger < DEBOUNCE_SECONDS:
             return

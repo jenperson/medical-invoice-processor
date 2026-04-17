@@ -9,20 +9,14 @@ This project shows how to use Mistral Workflows to process documents in healthca
 Run the following command to install the required project dependencies:
 
 ```bash
-make install-deps
+make installdeps
 ```
+
+Then copy `.env.example` to `.env` and set your `MISTRAL_API_KEY`.
+You can optionally override the chat completion models via
+`MISTRAL_CLASSIFIER_MODEL` and `MISTRAL_EXTRACTOR_MODEL`.
 
 ## Commands
-
-### Create the agents 
-
-This workflow makes use of two agents: a medical document classifier, and a medical patient extractor. The following command creates the agents, if they don't exist already. This process only needs to run once.
-
-```bash
-make create-agents
-```
-
-This command also adds the agent IDs, a deployment ID, and a build ID to your `.env` file.
 
 ### Register workflows in AI Studio
 
